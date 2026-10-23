@@ -200,6 +200,10 @@ func (s *controllingSelector) HandleSuccessResponse(
 		return
 	}
 
+	if !s.agent.validatesPair(pair, pendingRequest) {
+		return
+	}
+
 	pair.state = CandidatePairStateSucceeded
 	s.log.Tracef("Found valid candidate pair: %s", pair)
 
@@ -233,6 +237,9 @@ func (s *controllingSelector) PingCandidate(local, remote Candidate) {
 		PriorityAttr(local.prflxPriority()),
 	}
 	attributes = s.agent.appendPiggybackAttributes(attributes)
+	if s.agent.padsChecks(local, remote) {
+		attributes = append(attributes, paddingAttr(s.agent.paddedCheckSize))
+	}
 	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
 		stun.Fingerprint)
@@ -390,6 +397,9 @@ func (s *controlledSelector) PingCandidate(local, remote Candidate) {
 		PriorityAttr(local.prflxPriority()),
 	}
 	attributes = s.agent.appendPiggybackAttributes(attributes)
+	if s.agent.padsChecks(local, remote) {
+		attributes = append(attributes, paddingAttr(s.agent.paddedCheckSize))
+	}
 	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
 		stun.Fingerprint)
@@ -415,7 +425,7 @@ func (s *controlledSelector) HandleSuccessResponse(
 	// request with an appropriate error code response (e.g., 400)
 	// [RFC5389].
 
-	ok, _, rtt := s.agent.handleInboundBindingResponse(message.TransactionID, local, remoteAddr)
+	ok, pendingRequest, rtt := s.agent.handleInboundBindingResponse(message.TransactionID, local, remoteAddr)
 	if !ok {
 		s.log.Warnf("Discard message from (%s), unmatched TransactionID 0x%x", remote, message.TransactionID)
 
@@ -429,6 +439,10 @@ func (s *controlledSelector) HandleSuccessResponse(
 		// This shouldn't happen
 		s.log.Error("Success response from invalid candidate pair")
 
+		return
+	}
+
+	if !s.agent.validatesPair(pair, pendingRequest) {
 		return
 	}
 
